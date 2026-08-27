@@ -10,80 +10,122 @@
 - (void)togglePanel;
 @end
 
-static BOOL g_deepForceOpen = YES;
+// 全局控制开关
+static BOOL g_forceOpenMic = YES;
 static BOOL g_superBoost = YES;
-static UIWindow *g_window = nil;
+static float g_boostFactor = 4.0f; // 4倍硬核数字增益
+static UIWindow *g_overlayWindow = nil;
+static UILabel *g_statusLabel = nil;
 
 @implementation OverlayManager
 + (instancetype)sharedInstance {
     static OverlayManager *instance;
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ instance = [[OverlayManager alloc] init]; });
+    dispatch_once(&onceToken, ^{
+        instance = [[OverlayManager alloc] init];
+    });
     return instance;
 }
 
 - (void)togglePanel {
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (!g_window) {
-            g_window = [[UIWindow alloc] initWithFrame:CGRectMake(20, 120, 280, 180)];
-            g_window.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.95];
-            g_window.layer.cornerRadius = 12;
-            g_window.windowLevel = UIWindowLevelAlert + 999;
-            g_window.hidden = NO;
+        if (!g_overlayWindow) {
+            g_overlayWindow = [[UIWindow alloc] initWithFrame:CGRectMake(25, 120, 270, 190)];
+            g_overlayWindow.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.12 alpha:0.95];
+            g_overlayWindow.layer.cornerRadius = 14;
+            g_overlayWindow.layer.borderWidth = 1.0;
+            g_overlayWindow.layer.borderColor = [UIColor colorWithWhite:0.4 alpha:0.6].CGColor;
+            g_overlayWindow.clipsToBounds = YES;
+            g_overlayWindow.windowLevel = UIWindowLevelAlert + 999;
 
-            UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(10, 15, 260, 30)];
-            lbl.text = @"🔥 深度底层强开麦与增益中";
-            lbl.textColor = [UIColor greenColor];
-            lbl.font = [UIFont boldSystemFontOfSize:13];
-            lbl.textAlignment = NSTextAlignmentCenter;
-            [g_window addSubview:lbl];
+            UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+            [g_overlayWindow addGestureRecognizer:pan];
 
-            UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
-            close.frame = CGRectMake(40, 110, 200, 35);
-            [close setTitle:@"隐藏面板 (双指双击呼出)" forState:UIControlStateNormal];
-            [close setTitleColor:[UIColor lightGrayColor] forState:UIControlStateNormal];
-            [close addTarget:self action:@selector(togglePanel) forControlEvents:UIControlEventTouchUpInside];
-            [g_window addSubview:close];
-        } else {
-            g_window.hidden = !g_window.hidden;
+            UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 250, 25)];
+            title.text = @"Wespy 终极防线突破";
+            title.textColor = [UIColor whiteColor];
+            title.textAlignment = NSTextAlignmentCenter;
+            title.font = [UIFont boldSystemFontOfSize:14];
+            [g_overlayWindow addSubview:title];
+
+            g_statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 45, 240, 50)];
+            g_statusLabel.numberOfLines = 2;
+            g_statusLabel.textColor = [UIColor colorWithRed:0.2 green:0.9 blue:1.0 alpha:1];
+            g_statusLabel.font = [UIFont systemFontOfSize:12];
+            g_statusLabel.textAlignment = NSTextAlignmentCenter;
+            g_statusLabel.text = @"状态: 强制开麦[ON] | 增益放大[4.0X]";
+            [g_overlayWindow addSubview:g_statusLabel];
+
+            UIButton *hideBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+            hideBtn.frame = CGRectMake(20, 120, 230, 36);
+            hideBtn.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.9];
+            hideBtn.layer.cornerRadius = 8;
+            [hideBtn setTitle:@"隐藏面板 (双指双击呼出)" forState:UIControlStateNormal];
+            [hideBtn setTitleColor:[UIColor lightGrayColor] forState:UIControlStateNormal];
+            hideBtn.titleLabel.font = [UIFont systemFontOfSize:12];
+            [hideBtn addTarget:self action:@selector(togglePanel) forControlEvents:UIControlEventTouchUpInside];
+            [g_overlayWindow addSubview:hideBtn];
         }
+        g_overlayWindow.hidden = !g_overlayWindow.hidden;
     });
+}
+
+- (void)handlePan:(UIPanGestureRecognizer *)pan {
+    CGPoint translation = [pan translationInView:g_overlayWindow];
+    g_overlayWindow.center = CGPointMake(g_overlayWindow.center.x + translation.x, g_overlayWindow.center.y + translation.y);
+    [pan setTranslation:CGPointZero inView:g_overlayWindow];
 }
 @end
 
-// ==================== 1. Zego 引擎底层状态机硬编码劫持 ====================
+// ==================== 1. 业务层麦位与语音房强制劫持 ====================
 
-%hook ZegoExpressEngine
-- (BOOL)isMuted {
-    if (g_deepForceOpen) return NO;
-    return %orig;
-}
-
-- (BOOL)isPublishStreamAudioMuted {
-    if (g_deepForceOpen) return NO;
-    return %orig;
-}
-
-- (void)zego_handleServerMuteCommand:(id)arg1 {
-    if (g_deepForceOpen) {
-        return;
-    }
-    %orig;
-}
-%end
-
-// ==================== 2. 腾讯 TRTC 引擎底层状态强改 ====================
-%hook TRTCCloud
-- (void)muteLocalAudio:(BOOL)mute {
-    if (g_deepForceOpen) {
-        %orig(NO);
+// 拦截会玩 App 语音房内所有关于自闭麦、禁麦的业务逻辑类
+%hook HWVoiceRoomCommon
+- (void)muteSelfAudio:(BOOL)mute {
+    if (g_forceOpenMic) {
+        %orig(NO); // 强制不闭麦
         return;
     }
     %orig(mute);
 }
+- (BOOL)isSelfMuted {
+    if (g_forceOpenMic) return NO;
+    return %orig;
+}
 %end
 
-// ==================== 3. 内存补丁与音频流乘法放大 (突破AGC限制) ====================
+// 拦截聊天室队列成员静音更新
+%hook RoomInfoManager
+- (void)updateMemberMuteState:(id)arg1 mute:(BOOL)arg2 {
+    if (g_forceOpenMic) {
+        %orig(arg1, NO); // 强制忽略服务端的禁麦
+        return;
+    }
+    %orig(arg1, mute);
+}
+%end
+
+// ==================== 2. RTC 引擎层状态机与信令免疫 ====================
+
+%hook ZegoExpressEngine
+- (void)mutePublishStreamAudio:(BOOL)mute {
+    if (g_forceOpenMic) { %orig(NO); return; }
+    %orig(mute);
+}
+- (void)enableAudioCapture:(BOOL)enable {
+    if (g_forceOpenMic) { %orig(YES); return; }
+    %orig(enable);
+}
+%end
+
+%hook TRTCCloud
+- (void)muteLocalAudio:(BOOL)mute {
+    if (g_forceOpenMic) { %orig(NO); return; }
+    %orig(mute);
+}
+%end
+
+// ==================== 3. 终极音频缓冲区硬核增益（免AGC抑制） ====================
 
 static void *(*orig_AudioQueueEnqueueBuffer)(void *, void *, UInt32, void *);
 
@@ -101,17 +143,19 @@ void *my_AudioQueueEnqueueBuffer(void *inAQ, void *inBuffer, UInt32 inNumPacketD
             SInt16 *samples = (SInt16 *)buf->mAudioData;
             int numSamples = buf->mAudioDataByteSize / sizeof(SInt16);
             for (int i = 0; i < numSamples; i++) {
-                int scaled = samples[i] * 3.0;
-                if (scaled > 32767) scaled = 32767;
-                if (scaled < -32768) scaled = -32768;
-                samples[i] = (SInt16)scaled;
+                // 直接进行放大，带软截断保护防破音
+                float val = samples[i] * g_boostFactor;
+                if (val > 32767.0f) val = 32767.0f;
+                if (val < -32768.0f) val = -32768.0f;
+                samples[i] = (SInt16)val;
             }
         }
     }
     return orig_AudioQueueEnqueueBuffer(inAQ, inBuffer, inNumPacketDescs, inPacketDescs);
 }
 
-// ==================== 初始化与手势绑定 ====================
+// ==================== 初始化与手势挂载 ====================
+
 %hook UIWindow
 - (instancetype)initWithFrame:(CGRect)frame {
     id orig = %orig;
