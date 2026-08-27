@@ -20,9 +20,10 @@ jobs:
         git clone --recursive https://github.com/theos/theos.git ~/theos
         echo "THEOS=~/theos" >> $GITHUB_ENV
 
-    - name: Setup iOS SDK
+    - name: Setup iOS SDK & ldid
       run: |
         git clone --quiet --depth=1 https://github.com/theos/sdks.git $THEOS/sdks
+        brew install ldid
 
     - name: Compile Dylib
       run: |
@@ -33,4 +34,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: WespyAudioEnhancer.dylib
-        path: .theos/obj/debug/*.dylib
+        path: |
+          .theos/obj/debug/*.dylib
+          .theos/obj/*.dylib
