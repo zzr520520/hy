@@ -1,9 +1,7 @@
-name: Build Dylib
+name: Build Wespy Dylib
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
