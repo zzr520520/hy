@@ -1,0 +1,36 @@
+name: Build Dylib
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Install Theos
+      run: |
+        git clone --recursive https://github.com/theos/theos.git ~/theos
+        echo "THEOS=~/theos" >> $GITHUB_ENV
+
+    - name: Setup iOS SDK
+      run: |
+        git clone --quiet --depth=1 https://github.com/theos/sdks.git $THEOS/sdks
+
+    - name: Compile Dylib
+      run: |
+        export THEOS=~/theos
+        make package FINALPACKAGE=1
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: WespyAudioEnhancer.dylib
+        path: .theos/obj/debug/*.dylib
