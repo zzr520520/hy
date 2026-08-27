@@ -79,29 +79,29 @@ static UILabel *g_statusLabel = nil;
 
 // ==================== 1. 业务层麦位与语音房强制劫持 ====================
 
-// 拦截会玩 App 语音房内所有关于自闭麦、禁麦的业务逻辑类
 %hook HWVoiceRoomCommon
 - (void)muteSelfAudio:(BOOL)mute {
     if (g_forceOpenMic) {
-        %orig(NO); // 强制不闭麦
+        %orig(NO);
         return;
     }
     %orig(mute);
 }
 - (BOOL)isSelfMuted {
-    if (g_forceOpenMic) return NO;
-    return %orig;
+    if (g_forceOpenMic) {
+        return NO;
+    }
+    return %orig();
 }
 %end
 
-// 拦截聊天室队列成员静音更新
 %hook RoomInfoManager
 - (void)updateMemberMuteState:(id)arg1 mute:(BOOL)arg2 {
     if (g_forceOpenMic) {
-        %orig(arg1, NO); // 强制忽略服务端的禁麦
+        %orig(arg1, NO);
         return;
     }
-    %orig;
+    %orig();
 }
 %end
 
@@ -109,18 +109,27 @@ static UILabel *g_statusLabel = nil;
 
 %hook ZegoExpressEngine
 - (void)mutePublishStreamAudio:(BOOL)mute {
-    if (g_forceOpenMic) { %orig(NO); return; }
+    if (g_forceOpenMic) {
+        %orig(NO);
+        return;
+    }
     %orig(mute);
 }
 - (void)enableAudioCapture:(BOOL)enable {
-    if (g_forceOpenMic) { %orig(YES); return; }
+    if (g_forceOpenMic) {
+        %orig(YES);
+        return;
+    }
     %orig(enable);
 }
 %end
 
 %hook TRTCCloud
 - (void)muteLocalAudio:(BOOL)mute {
-    if (g_forceOpenMic) { %orig(NO); return; }
+    if (g_forceOpenMic) {
+        %orig(NO);
+        return;
+    }
     %orig(mute);
 }
 %end
@@ -143,7 +152,6 @@ void *my_AudioQueueEnqueueBuffer(void *inAQ, void *inBuffer, UInt32 inNumPacketD
             SInt16 *samples = (SInt16 *)buf->mAudioData;
             int numSamples = buf->mAudioDataByteSize / sizeof(SInt16);
             for (int i = 0; i < numSamples; i++) {
-                // 直接进行放大，带软截断保护防破音
                 float val = samples[i] * g_boostFactor;
                 if (val > 32767.0f) val = 32767.0f;
                 if (val < -32768.0f) val = -32768.0f;
