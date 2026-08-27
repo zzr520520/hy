@@ -29,11 +29,13 @@ jobs:
       run: |
         export THEOS=~/theos
         make package FINALPACKAGE=1
+        echo "=== 查找编译产物 ==="
+        find .theos -name "*.dylib" -type f
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: WespyAudioEnhancer.dylib
+        name: WespyAudioEnhancer
         path: |
-          .theos/obj/debug/*.dylib
-          .theos/obj/*.dylib
+          .theos/obj/
+          *.deb
