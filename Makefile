@@ -7,5 +7,6 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME := WespyAudioEnhancer
 WespyAudioEnhancer_FILES := Tweak.x
 WespyAudioEnhancer_CFLAGS := -fobjc-arc
+WespyAudioEnhancer_FRAMEWORKS := AVFoundation AudioToolbox
 
 include $(THEOS_MAKE_PATH)/tweak.mk
