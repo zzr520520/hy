@@ -101,7 +101,7 @@ static UILabel *g_statusLabel = nil;
         %orig(arg1, NO); // 强制忽略服务端的禁麦
         return;
     }
-    %orig(arg1, mute);
+    %orig;
 }
 %end
 
