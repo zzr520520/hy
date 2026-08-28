@@ -123,9 +123,8 @@ static UILabel *g_statusLabel = nil;
 }
 @end
 
-// ==================== 核心底层突破：声网(Agora)与音视频引擎底裤级劫持 ====================
+// ==================== 1. 声网 Agora RTC 引擎 ====================
 
-// 1. 劫持声网 Agora RTC 引擎
 %hook AgoraRtcEngineKit
 - (int)muteLocalAudioStream:(BOOL)mute {
     if (g_forceOpenMic) {
@@ -141,6 +140,13 @@ static UILabel *g_statusLabel = nil;
     return %orig(enabled);
 }
 
+- (int)setClientRole:(NSInteger)role {
+    if (g_forceOpenMic) {
+        return %orig(1); // AgoraClientRoleBroadcaster = 1
+    }
+    return %orig(role);
+}
+
 - (int)adjustRecordingSignalVolume:(NSInteger)volume {
     if (g_superBoost) {
         return %orig(400);
@@ -149,7 +155,35 @@ static UILabel *g_statusLabel = nil;
 }
 %end
 
-// 2. 业务房强制不自闭麦
+// ==================== 2. 腾讯云 LiteAV / TRTC 引擎 ====================
+
+%hook TRTCCloud
+- (void)muteLocalAudio:(BOOL)mute {
+    if (g_forceOpenMic) {
+        %orig(NO);
+        return;
+    }
+    %orig(mute);
+}
+
+- (void)stopLocalAudio {
+    if (g_forceOpenMic) {
+        return; // 阻止停止采集
+    }
+    %orig();
+}
+
+- (void)startLocalAudio:(NSInteger)quality {
+    if (g_forceOpenMic) {
+        %orig(quality);
+        return;
+    }
+    %orig(quality);
+}
+%end
+
+// ==================== 3. 业务层麦位状态拦截 ====================
+
 %hook HWVoiceRoomCommon
 - (void)muteSelfAudio:(BOOL)mute {
     if (g_forceOpenMic) {
@@ -166,7 +200,59 @@ static UILabel *g_statusLabel = nil;
 }
 %end
 
-// 3. PCM 缓冲区硬件级直接倍乘放大（绕过普通API限制）
+// ==================== 4. 房间状态模型属性锁死 ====================
+
+%hook WESVoiceRoomManager
+- (BOOL)isMuted {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+- (BOOL)isForbidden {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+- (BOOL)isBanned {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+%end
+
+%hook WESMicService
+- (BOOL)isMuted {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+- (BOOL)isForbidden {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+- (BOOL)isBanned {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+%end
+
+%hook WESSeatModel
+- (BOOL)isMuted {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+- (BOOL)isForbidden {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+- (BOOL)isBanned {
+    if (g_forceOpenMic) return NO;
+    return %orig();
+}
+- (NSInteger)micStatus {
+    if (g_forceOpenMic) return 0; // 0 = 正常开麦
+    return %orig();
+}
+%end
+
+// ==================== 5. PCM 缓冲区硬件级倍乘放大 ====================
+
 static void *(*orig_AudioQueueEnqueueBuffer)(void *, void *, UInt32, void *);
 
 void *my_AudioQueueEnqueueBuffer(void *inAQ, void *inBuffer, UInt32 inNumPacketDescs, void *inPacketDescs) {
@@ -194,6 +280,7 @@ void *my_AudioQueueEnqueueBuffer(void *inAQ, void *inBuffer, UInt32 inNumPacketD
 }
 
 // ==================== 手势唤起与构造函数 ====================
+
 %hook UIWindow
 - (instancetype)initWithFrame:(CGRect)frame {
     id orig = %orig;
