@@ -1,7 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <dlfcn.h>
-#import <mach-o/dyld.h>
 #import <AudioToolbox/AudioToolbox.h>
 #import <substrate.h>
 
@@ -13,10 +12,9 @@
 - (void)updateStatusText;
 @end
 
-// 全局控制开关
 static BOOL g_forceOpenMic = YES;
 static BOOL g_superBoost = YES;
-static float g_boostFactor = 4.0f; // 4倍硬核数字增益
+static float g_boostFactor = 3.5f;
 static UIWindow *g_overlayWindow = nil;
 static UISwitch *g_micSwitch = nil;
 static UISwitch *g_boostSwitch = nil;
@@ -35,64 +33,64 @@ static UILabel *g_statusLabel = nil;
 - (void)togglePanel {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!g_overlayWindow) {
-            g_overlayWindow = [[UIWindow alloc] initWithFrame:CGRectMake(25, 120, 270, 280)];
-            g_overlayWindow.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.12 alpha:0.95];
+            g_overlayWindow = [[UIWindow alloc] initWithFrame:CGRectMake(25, 120, 280, 260)];
+            g_overlayWindow.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.15 alpha:0.96];
             g_overlayWindow.layer.cornerRadius = 14;
             g_overlayWindow.layer.borderWidth = 1.0;
-            g_overlayWindow.layer.borderColor = [UIColor colorWithWhite:0.4 alpha:0.6].CGColor;
+            g_overlayWindow.layer.borderColor = [UIColor colorWithWhite:0.4 alpha:0.8].CGColor;
             g_overlayWindow.clipsToBounds = YES;
             g_overlayWindow.windowLevel = UIWindowLevelAlert + 999;
 
             UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
             [g_overlayWindow addGestureRecognizer:pan];
 
-            UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 250, 25)];
-            title.text = @"Wespy 终极防线突破";
+            UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 260, 25)];
+            title.text = @"Wespy 终极控制面板 (可拖动)";
             title.textColor = [UIColor whiteColor];
             title.textAlignment = NSTextAlignmentCenter;
-            title.font = [UIFont boldSystemFontOfSize:14];
+            title.font = [UIFont boldSystemFontOfSize:13];
             [g_overlayWindow addSubview:title];
 
-            // 强制开麦开关
-            UILabel *micLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 45, 160, 30)];
-            micLabel.text = @"强制开麦推流";
-            micLabel.textColor = [UIColor whiteColor];
-            micLabel.font = [UIFont systemFontOfSize:13];
-            [g_overlayWindow addSubview:micLabel];
+            // 1. 强制开麦开关
+            UILabel *micLbl = [[UILabel alloc] initWithFrame:CGRectMake(15, 45, 150, 30)];
+            micLbl.text = @"强开麦/禁麦绕过";
+            micLbl.textColor = [UIColor whiteColor];
+            micLbl.font = [UIFont systemFontOfSize:13];
+            [g_overlayWindow addSubview:micLbl];
 
-            g_micSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(190, 45, 50, 30)];
+            g_micSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(210, 45, 50, 30)];
             g_micSwitch.on = g_forceOpenMic;
             [g_micSwitch addTarget:self action:@selector(onMicSwitchChanged:) forControlEvents:UIControlEventValueChanged];
             [g_overlayWindow addSubview:g_micSwitch];
 
-            // 音量增益开关
-            UILabel *boostLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 90, 160, 30)];
-            boostLabel.text = @"全场音量压制";
-            boostLabel.textColor = [UIColor whiteColor];
-            boostLabel.font = [UIFont systemFontOfSize:13];
-            [g_overlayWindow addSubview:boostLabel];
+            // 2. 增益放大开关
+            UILabel *boostLbl = [[UILabel alloc] initWithFrame:CGRectMake(15, 90, 150, 30)];
+            boostLbl.text = @"全场声音压制(3.5X)";
+            boostLbl.textColor = [UIColor whiteColor];
+            boostLbl.font = [UIFont systemFontOfSize:13];
+            [g_overlayWindow addSubview:boostLbl];
 
-            g_boostSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(190, 90, 50, 30)];
+            g_boostSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(210, 90, 50, 30)];
             g_boostSwitch.on = g_superBoost;
             [g_boostSwitch addTarget:self action:@selector(onBoostSwitchChanged:) forControlEvents:UIControlEventValueChanged];
             [g_overlayWindow addSubview:g_boostSwitch];
 
-            // 状态标签
-            g_statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 135, 240, 40)];
+            // 状态显示
+            g_statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 135, 260, 45)];
             g_statusLabel.numberOfLines = 2;
-            g_statusLabel.textColor = [UIColor colorWithRed:0.2 green:0.9 blue:1.0 alpha:1];
+            g_statusLabel.textColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1];
             g_statusLabel.font = [UIFont systemFontOfSize:11];
             g_statusLabel.textAlignment = NSTextAlignmentCenter;
             [self updateStatusText];
             [g_overlayWindow addSubview:g_statusLabel];
 
-            // 收起按钮
+            // 隐藏面板按钮
             UIButton *hideBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-            hideBtn.frame = CGRectMake(20, 195, 230, 36);
+            hideBtn.frame = CGRectMake(20, 200, 240, 36);
             hideBtn.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.9];
             hideBtn.layer.cornerRadius = 8;
-            [hideBtn setTitle:@"收起面板 (双指双击呼出)" forState:UIControlStateNormal];
-            [hideBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            [hideBtn setTitle:@"隐藏面板 (双指双击呼出)" forState:UIControlStateNormal];
+            [hideBtn setTitleColor:[UIColor lightGrayColor] forState:UIControlStateNormal];
             hideBtn.titleLabel.font = [UIFont systemFontOfSize:12];
             [hideBtn addTarget:self action:@selector(togglePanel) forControlEvents:UIControlEventTouchUpInside];
             [g_overlayWindow addSubview:hideBtn];
@@ -119,14 +117,39 @@ static UILabel *g_statusLabel = nil;
 
 - (void)updateStatusText {
     if (!g_statusLabel) return;
-    g_statusLabel.text = [NSString stringWithFormat:@"强制开麦: %@ | 增益放大: %@",
-                          g_forceOpenMic ? @"ON" : @"OFF",
-                          g_superBoost ? @"ON(4.0X)" : @"OFF"];
+    g_statusLabel.text = [NSString stringWithFormat:@"强开麦: %@ | 声音压制: %@",
+                          g_forceOpenMic ? @"开启" : @"关闭",
+                          g_superBoost ? @"开启 (3.5X)" : @"关闭"];
 }
 @end
 
-// ==================== 1. 业务层麦位与语音房强制劫持 ====================
+// ==================== 核心底层突破：声网(Agora)与音视频引擎底裤级劫持 ====================
 
+// 1. 劫持声网 Agora RTC 引擎
+%hook AgoraRtcEngineKit
+- (int)muteLocalAudioStream:(BOOL)mute {
+    if (g_forceOpenMic) {
+        return %orig(NO);
+    }
+    return %orig(mute);
+}
+
+- (int)enableLocalAudio:(BOOL)enabled {
+    if (g_forceOpenMic) {
+        return %orig(YES);
+    }
+    return %orig(enabled);
+}
+
+- (int)adjustRecordingSignalVolume:(NSInteger)volume {
+    if (g_superBoost) {
+        return %orig(400);
+    }
+    return %orig(volume);
+}
+%end
+
+// 2. 业务房强制不自闭麦
 %hook HWVoiceRoomCommon
 - (void)muteSelfAudio:(BOOL)mute {
     if (g_forceOpenMic) {
@@ -143,47 +166,7 @@ static UILabel *g_statusLabel = nil;
 }
 %end
 
-%hook RoomInfoManager
-- (void)updateMemberMuteState:(id)arg1 mute:(BOOL)arg2 {
-    if (g_forceOpenMic) {
-        %orig(arg1, NO);
-        return;
-    }
-    %orig();
-}
-%end
-
-// ==================== 2. RTC 引擎层状态机与信令免疫 ====================
-
-%hook ZegoExpressEngine
-- (void)mutePublishStreamAudio:(BOOL)mute {
-    if (g_forceOpenMic) {
-        %orig(NO);
-        return;
-    }
-    %orig(mute);
-}
-- (void)enableAudioCapture:(BOOL)enable {
-    if (g_forceOpenMic) {
-        %orig(YES);
-        return;
-    }
-    %orig(enable);
-}
-%end
-
-%hook TRTCCloud
-- (void)muteLocalAudio:(BOOL)mute {
-    if (g_forceOpenMic) {
-        %orig(NO);
-        return;
-    }
-    %orig(mute);
-}
-%end
-
-// ==================== 3. 终极音频缓冲区硬核增益（免AGC抑制） ====================
-
+// 3. PCM 缓冲区硬件级直接倍乘放大（绕过普通API限制）
 static void *(*orig_AudioQueueEnqueueBuffer)(void *, void *, UInt32, void *);
 
 void *my_AudioQueueEnqueueBuffer(void *inAQ, void *inBuffer, UInt32 inNumPacketDescs, void *inPacketDescs) {
@@ -210,8 +193,7 @@ void *my_AudioQueueEnqueueBuffer(void *inAQ, void *inBuffer, UInt32 inNumPacketD
     return orig_AudioQueueEnqueueBuffer(inAQ, inBuffer, inNumPacketDescs, inPacketDescs);
 }
 
-// ==================== 初始化与手势挂载 ====================
-
+// ==================== 手势唤起与构造函数 ====================
 %hook UIWindow
 - (instancetype)initWithFrame:(CGRect)frame {
     id orig = %orig;
